@@ -29,7 +29,7 @@
 
   <script>
     const callerId = Math.floor(100000 + Math.random() * 900000).toString();;
-    const socket = io("http://enigmakey.tech:3500", { transports: ['websocket'], query: { callerId } });
+    const socket = io("wss://enigmakey.tech:3500", { transports: ['websocket'], query: { callerId } });
     let localStream, remoteStream, pc, targetPeerId;
     const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
