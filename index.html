@@ -26,6 +26,8 @@
     <video id="remote-video" autoplay></video>
   </div>
 
+  <!-- Javascript -->
+
   <script>
     const callerId = Math.floor(100000 + Math.random() * 900000).toString();;
     const socket = io("wss://enigmakey.tech:3500", { transports: ['websocket'], query: { callerId } });
