@@ -1,0 +1,213 @@
+<!-- https://khansaabyousafxai.github.io/audio-video-call/ -->
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>WebRTC Video Call with Custom Signaling</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    video { width: 45%; margin: 5px; border: 1px solid #333; }
+  </style>
+</head>
+<body>
+  <h1>WebRTC Video Call with Custom Signaling Server</h1>
+  <p>Your ID: <span id="my-id">...</span></p>
+  <div>
+    <input type="text" id="peer-id-input" placeholder="Enter peer ID to call">
+    <button id="call-btn">Call</button>
+    <button id="mute-btn">Mute/Unmute</button>
+    <button id="video-btn">Pause/Resume Video</button>
+  </div>
+  <div>
+    <video id="local-video" autoplay muted></video>
+    <video id="remote-video" autoplay></video>
+  </div>
+
+  <script>
+    const callerId = Math.floor(100000 + Math.random() * 900000).toString();;
+    const socket = io("wss://enigmakey.tech:3500", { transports: ['websocket'], query: { callerId } });
+    let localStream, remoteStream, pc, targetPeerId;
+    const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    const sendPing = async () => {
+  let recipientId = '388395'
+const userId = '123456'; // Fetch the active user's ID
+  if (socket && recipientId && userId) {
+    socket.emit('sendPing', { recipientId, callerName: 'Testing user', callerAvatar: '', userId: userId, callType: 'video' });
+    // Alert.alert('Ping Sent', `Ping sent to ${recipientId}`);
+  } else {
+    // Alert.alert('Error', 'Recipient ID is required to send a ping.');
+    console.log('Error', 'Recipient ID is required to send a ping.')
+  }
+};
+    
+ // Get local media (video and audio)
+ navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        localStream = stream;
+        document.getElementById('local-video').srcObject = stream;
+      })
+      .catch(err => {
+        console.error('Failed to get local stream:', err);
+      });
+    
+  // When connected, display our own callerId.
+  socket.on('connect', () => {
+      document.getElementById('my-id').textContent = callerId;
+      console.log('Connected with callerId:', callerId, 'and socket id:', socket.id);
+    });
+
+     // Function to create a new RTCPeerConnection and add local tracks.
+    function createPeerConnection() {
+      pc = new RTCPeerConnection(configuration);
+
+      // Add our local tracks to the connection.
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+      // When remote tracks arrive, display them.
+      pc.ontrack = event => {
+        if (!remoteStream) {
+          remoteStream = new MediaStream();
+          document.getElementById('remote-video').srcObject = remoteStream;
+        }
+        remoteStream.addTrack(event.track);
+      };
+
+      // When an ICE candidate is found, send it to the other peer.
+      pc.onicecandidate = event => {
+        if (event.candidate) {
+          console.log('Sending ICE candidate:', event.candidate);
+          socket.emit('ICEcandidate', {
+            calleeId: targetPeerId,
+            rtcMessage: { candidate: event.candidate }
+          });
+        }
+      };
+    }
+
+   // Initiate a call when the call button is clicked.
+   document.getElementById('call-btn').addEventListener('click', () => {
+      targetPeerId = document.getElementById('peer-id-input').value;
+      if (!targetPeerId) {
+        return alert('Please enter a peer ID.');
+      }
+      createPeerConnection();
+      // Create an offer
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .then(() => {
+          // Send the offer (as rtcMessage) to the callee via the signaling server.
+          socket.emit('call', {
+            calleeId: targetPeerId,
+            rtcMessage: { sdp: pc.localDescription }
+          });
+          console.log('Offer sent to', targetPeerId);
+          let recipientId = targetPeerId
+const userId = '52b413a9-3e0a-4594-9486-f18ca8b3e4de'; // Fetch the active user's ID
+  if (socket && recipientId && userId) {
+    socket.emit('sendPing', { recipientId, callerName: 'Muhammad Farooq', callerAvatar: '/serv/files/1000059257.jpg', userId: userId, callType: 'video' });
+    // Alert.alert('Ping Sent', `Ping sent to ${recipientId}`);
+  } 
+        })
+        .catch(err => console.error('Error creating offer:', err));
+    });
+
+    // When receiving an incoming call (offer)
+    socket.on('newCall', data => {
+      // data: { callerId, rtcMessage }
+      const callerId = data.callerId;
+      const rtcMessage = data.rtcMessage;
+      console.log('Incoming call from', callerId);
+      
+      // Save the caller as our target and create a connection.
+      if (!pc) {
+        targetPeerId = callerId;
+        createPeerConnection();
+      }
+      
+      // Set the remote description to the received offer.
+      pc.setRemoteDescription(new RTCSessionDescription(rtcMessage.sdp))
+        .then(() => {
+          // Create an answer.
+          return pc.createAnswer();
+        })
+        .then(answer => pc.setLocalDescription(answer))
+        .then(() => {
+          // Send the answer back to the caller.
+          socket.emit('answerCall', {
+            callerId: callerId,
+            rtcMessage: { sdp: pc.localDescription }
+          });
+          console.log('Answer sent to', callerId);
+        })
+        .catch(err => console.error('Error handling incoming call:', err));
+    });
+    
+      // When our call gets answered, set the remote description.
+      socket.on('callAnswered', data => {
+      console.log('Call answered by', data.callee);
+      const rtcMessage = data.rtcMessage;
+      pc.setRemoteDescription(new RTCSessionDescription(rtcMessage.sdp))
+        .catch(err => console.error('Error setting remote description:', err));
+    });
+
+     // Handle ICE candidates received from the other peer.
+     socket.on('ICEcandidate', data => {
+      const rtcMessage = data.rtcMessage;
+      if (rtcMessage.candidate) {
+        console.log('Received ICE candidate:', rtcMessage.candidate);
+        pc.addIceCandidate(new RTCIceCandidate(rtcMessage.candidate))
+          .catch(err => console.error('Error adding ICE candidate:', err));
+      }
+    });
+
+    socket.on('receivePing', data => {
+      alert(`${data.callerName} is calling.`);
+    });
+
+    socket?.on('receiveReversePing', async (data) => {
+  console.warn("🚀 ~ socket.on ~ receiveReversePing data:", data)
+  if(data.action === 'decline'){
+    alert('User B cancel the call')
+  }else if(data.action === 'accept'){
+    // processCall();
+    alert('User B accept the call')
+  }
+});
+
+    document.getElementById('mute-btn').addEventListener('click', () => {
+      let audioTrack = localStream.getAudioTracks()[0];
+      audioTrack.enabled = !audioTrack.enabled;
+      socket.emit('micStatusChanged', {
+            userId: callerId, // your current user ID
+            micStatus: !audioTrack.enabled,
+            remoteId: targetPeerId
+        });
+        console.log('callerId', callerId);
+        console.log('targetPeerId', targetPeerId)
+      // socket.emit('micStatusChanged', { remoteId: targetPeerId, isMuted: !audioTrack.enabled });
+    });
+
+    socket.on('micStatusChanged', data => {
+      alert(`Microphone status changed: ${data.micStatus ? 'Muted' : 'Unmuted'}`);
+    });
+
+    document.getElementById('video-btn').addEventListener('click', () => {
+      let videoTrack = localStream.getVideoTracks()[0];
+      videoTrack.enabled = !videoTrack.enabled;
+      socket.emit('remoteToggleVideo', { calleeId: targetPeerId, isVideoOn: videoTrack.enabled });
+    });
+
+    socket.on('remoteToggleVideo', isVideoOn => {
+      alert(`Remote video is now ${isVideoOn ? 'ON' : 'OFF'}`);
+    });
+
+    socket.on('userLeft', () => {
+      alert('The other user has left the call.');
+    });
+  </script>
+</body>
+</html>
